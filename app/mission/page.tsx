@@ -26,17 +26,29 @@ function MissionContent() {
   const mission =
     experienceMissions[missionIndex] || experienceMissions[0];
 
-  useEffect(() => {
+    useEffect(() => {
     async function loadDifficulty() {
+      setRecommendedDifficulty("Connecting...");
+
       try {
         const response = await fetch(
-          `https://campus-cryptic-api.onrender.com/adaptive-difficulty?wrong_attempts=${wrongAttempts}`
+          `https://campus-cryptic-api.onrender.com/adaptive-difficulty?wrong_attempts=${wrongAttempts}`,
+          {
+            method: "GET",
+          }
         );
+
+        if (!response.ok) {
+          throw new Error("Backend request failed");
+        }
 
         const data = await response.json();
 
-        setRecommendedDifficulty(data.recommended_difficulty);
-      } catch {
+        setRecommendedDifficulty(
+          data.recommended_difficulty || "Unavailable"
+        );
+      } catch (error) {
+        console.error("Adaptive API error:", error);
         setRecommendedDifficulty("Offline");
       }
     }
