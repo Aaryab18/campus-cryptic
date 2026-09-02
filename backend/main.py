@@ -648,9 +648,75 @@ def extract_genie_mission(
     return mission
 
 
-# ===================================================
+# ---------------------------------------------------
 # GENIE-POWERED ADAPTIVE MISSION
-# ===================================================
+# ---------------------------------------------------
+
+def parse_genie_mission(text, campus_name, experience, difficulty):
+    """
+    Convert Genie text response into a structured mission object.
+    """
+
+    mission = {
+        "node_id": 0,
+        "campus_name": campus_name,
+        "experience": experience,
+        "location_name": "",
+        "description": "",
+        "puzzle": "",
+        "correct_answer": "",
+        "difficulty": difficulty,
+        "hint_1": "",
+        "hint_2": "",
+        "xp_reward": 0,
+    }
+
+    if not text:
+        return mission
+
+    lines = text.strip().splitlines()
+
+    for line in lines:
+
+        line = line.strip()
+
+        if ":" not in line:
+            continue
+
+        key, value = line.split(":", 1)
+
+        key = key.strip().lower()
+        value = value.strip()
+
+        if key == "location_name":
+            mission["location_name"] = value
+
+        elif key == "description":
+            mission["description"] = value
+
+        elif key == "puzzle":
+            mission["puzzle"] = value
+
+        elif key == "correct_answer":
+            mission["correct_answer"] = value
+
+        elif key == "difficulty":
+            mission["difficulty"] = value
+
+        elif key == "hint_1":
+            mission["hint_1"] = value
+
+        elif key == "hint_2":
+            mission["hint_2"] = value
+
+        elif key == "xp_reward":
+            try:
+                mission["xp_reward"] = int(value)
+            except ValueError:
+                mission["xp_reward"] = 0
+
+    return mission
+
 
 @app.get("/genie-mission")
 def genie_mission(
@@ -659,50 +725,75 @@ def genie_mission(
     wrong_attempts: int = 0,
 ):
 
-    difficulty, reason = (
-        calculate_difficulty(
-            wrong_attempts
+    # -----------------------------------------------
+    # ADAPTIVE DIFFICULTY
+    # -----------------------------------------------
+
+    if wrong_attempts >= 3:
+
+        difficulty = "Easy"
+
+        reason = (
+            "The player is struggling, so the AI Game Master "
+            "selected an easier challenge."
         )
-    )
+
+    elif wrong_attempts >= 1:
+
+        difficulty = "Medium"
+
+        reason = (
+            "The player made incorrect attempts, so the AI "
+            "Game Master selected a moderate challenge."
+        )
+
+    else:
+
+        difficulty = "Hard"
+
+        reason = (
+            "The player is performing well, so the AI Game Master "
+            "selected a harder challenge."
+        )
+
+
+    # -----------------------------------------------
+    # PROMPT FOR GENIE
+    # -----------------------------------------------
 
     prompt = f"""
 You are the Campus Cryptic AI Game Master.
 
-Use the campus_nodes table available in this Genie
-Space.
+Select exactly one mission from the campus_nodes data.
 
-Select exactly ONE mission.
-
-Campus name: {campus_name}
-Experience type: {experience}
+Campus: {campus_name}
+Experience: {experience}
 Difficulty: {difficulty}
 
-The player currently has
-{wrong_attempts} wrong attempts.
+Player wrong attempts: {wrong_attempts}
 
-Return the answer in this EXACT format:
+Return ONLY the following fields.
 
-location_name: <location>
-description: <description>
-puzzle: <puzzle>
-correct_answer: <answer>
-difficulty: <difficulty>
-hint_1: <first hint>
-hint_2: <second hint>
+location_name: <value>
+description: <value>
+puzzle: <value>
+correct_answer: <value>
+difficulty: <value>
+hint_1: <value>
+hint_2: <value>
 xp_reward: <number>
 
-Do not add any introduction.
+Do not use markdown.
 Do not add explanations.
-Do not add markdown.
-Return only these eight fields.
+Do not add extra text.
 """
 
 
     try:
 
-        # ===========================================
+        # -------------------------------------------
         # START GENIE CONVERSATION
-        # ===========================================
+        # -------------------------------------------
 
         response = requests.post(
             GENIE_START_URL,
@@ -717,19 +808,14 @@ Return only these eight fields.
 
             raise HTTPException(
                 status_code=response.status_code,
-                detail=(
-                    "Genie start error: "
-                    f"{response.text}"
-                ),
+                detail=f"Genie start error: {response.text}",
             )
 
 
         start_data = response.json()
 
-        conversation_id = (
-            start_data.get(
-                "conversation_id"
-            )
+        conversation_id = start_data.get(
+            "conversation_id"
         )
 
 
@@ -738,27 +824,25 @@ Return only these eight fields.
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "No conversation ID returned "
-                    f"from Genie: {start_data}"
+                    "No conversation ID returned from Genie: "
+                    f"{start_data}"
                 ),
             )
 
 
-        # ===========================================
-        # GET CONVERSATION RESULT
-        # ===========================================
+        # -------------------------------------------
+        # GENIE MESSAGE URL
+        # -------------------------------------------
 
         message_url = (
             f"{GENIE_BASE_URL}"
-            f"/conversations/"
-            f"{conversation_id}"
-            f"/messages"
+            f"/conversations/{conversation_id}/messages"
         )
 
 
-        # ===========================================
+        # -------------------------------------------
         # POLL GENIE
-        # ===========================================
+        # -------------------------------------------
 
         for _ in range(30):
 
@@ -774,9 +858,7 @@ Return only these eight fields.
             if result_response.status_code >= 400:
 
                 raise HTTPException(
-                    status_code=(
-                        result_response.status_code
-                    ),
+                    status_code=result_response.status_code,
                     detail=(
                         "Genie result error: "
                         f"{result_response.text}"
@@ -784,165 +866,92 @@ Return only these eight fields.
                 )
 
 
-            result_data = (
-                result_response.json()
-            )
+            result_data = result_response.json()
 
 
             messages = result_data.get(
                 "messages",
-                (
-                    result_data
-                    if isinstance(
-                        result_data,
-                        list,
-                    )
-                    else []
-                ),
+                result_data
+                if isinstance(result_data, list)
+                else []
             )
 
 
             genie_answer = None
 
 
-            # =======================================
-            # FIND COMPLETED GENIE RESPONSE
-            # =======================================
+            # ---------------------------------------
+            # FIND COMPLETED GENIE MESSAGE
+            # ---------------------------------------
 
             for message in reversed(messages):
 
-                attachments = (
-                    message.get(
-                        "attachments",
-                        [],
-                    )
+                attachments = message.get(
+                    "attachments",
+                    []
                 )
 
                 for attachment in attachments:
 
                     if "text" in attachment:
 
-                        content = (
-                            attachment["text"]
-                            .get("content")
+                        content = attachment["text"].get(
+                            "content"
                         )
 
                         if content:
-
                             genie_answer = content
                             break
-
 
                 if genie_answer:
                     break
 
 
-            # =======================================
-            # GENIE RESPONSE FOUND
-            # =======================================
+            # ---------------------------------------
+            # RETURN STRUCTURED MISSION
+            # ---------------------------------------
 
             if genie_answer:
 
-                mission = (
-                    extract_genie_mission(
-                        genie_answer,
-                        campus_name,
-                        experience,
-                        difficulty,
-                    )
+                mission = parse_genie_mission(
+                    genie_answer,
+                    campus_name,
+                    experience,
+                    difficulty,
                 )
 
-
-                # ===================================
-                # FALLBACK IF PARSING IS INCOMPLETE
-                # ===================================
-
+                # Validate important fields
                 if (
                     not mission["location_name"]
                     or not mission["puzzle"]
                     or not mission["correct_answer"]
                 ):
-
-                    connection = (
-                        get_databricks_connection()
-                    )
-
-                    cursor = (
-                        connection.cursor()
-                    )
-
-                    cursor.execute(
-                        """
-                        SELECT *
-                        FROM workspace.default.campus_nodes
-                        WHERE LOWER(campus_name)
-                            = LOWER(?)
-                          AND LOWER(experience)
-                            = LOWER(?)
-                          AND LOWER(difficulty)
-                            = LOWER(?)
-                        ORDER BY RAND()
-                        LIMIT 1
-                        """,
-                        (
-                            campus_name,
-                            experience,
-                            difficulty,
+                    raise HTTPException(
+                        status_code=500,
+                        detail=(
+                            "Genie returned an incomplete mission: "
+                            f"{genie_answer}"
                         ),
                     )
 
-                    row = cursor.fetchone()
-
-                    columns = [
-                        column[0]
-                        for column
-                        in cursor.description
-                    ]
-
-                    cursor.close()
-                    connection.close()
-
-
-                    if row:
-
-                        mission = dict(
-                            zip(
-                                columns,
-                                row,
-                            )
-                        )
-
-
                 return {
-                    "source": (
-                        "Databricks Genie"
-                    ),
-                    "recommended_difficulty": (
-                        difficulty
-                    ),
+                    "source": "Databricks Genie",
+                    "recommended_difficulty": difficulty,
                     "reason": reason,
-                    "wrong_attempts": (
-                        wrong_attempts
-                    ),
-                    "conversation_id": (
-                        conversation_id
-                    ),
+                    "wrong_attempts": wrong_attempts,
+                    "conversation_id": conversation_id,
                     "mission": mission,
-                    "genie_raw_response": (
-                        genie_answer
-                    ),
+                    "genie_raw_response": genie_answer,
                 }
 
 
-        # ===========================================
-        # GENIE TIMEOUT
-        # ===========================================
+        # -------------------------------------------
+        # TIMEOUT
+        # -------------------------------------------
 
         raise HTTPException(
             status_code=504,
-            detail=(
-                "Genie response timed out"
-            ),
+            detail="Genie response timed out",
         )
 
 
@@ -954,8 +963,5 @@ Return only these eight fields.
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Genie error: "
-                f"{str(error)}"
-            ),
+            detail=f"Genie error: {str(error)}",
         )
