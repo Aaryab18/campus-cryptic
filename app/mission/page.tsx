@@ -37,56 +37,86 @@ function MissionContent() {
     useState<Mission | null>(null);
 
   const [answer, setAnswer] = useState("");
-  const [hintLevel, setHintLevel] = useState(0);
+
+  const [hintLevel, setHintLevel] =
+    useState(0);
 
   const [message, setMessage] =
     useState<"correct" | "wrong" | "">("");
 
-  const [xp, setXp] = useState(0);
+  const [xp, setXp] =
+    useState(0);
 
-  const [discoveredLocations, setDiscoveredLocations] =
-    useState<string[]>([]);
+  const [
+    discoveredLocations,
+    setDiscoveredLocations,
+  ] = useState<string[]>([]);
 
   const [wrongAttempts, setWrongAttempts] =
     useState(0);
 
-  const [recommendedDifficulty, setRecommendedDifficulty] =
-    useState("Connecting...");
+  const [
+    recommendedDifficulty,
+    setRecommendedDifficulty,
+  ] = useState("Connecting...");
 
-  const [reason, setReason] = useState("");
+  const [reason, setReason] =
+    useState("");
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [missionRefresh, setMissionRefresh] =
-    useState(0);
+  const [
+    missionRefresh,
+    setMissionRefresh,
+  ] = useState(0);
+
+
+  // ==========================================
+  // LOAD GENIE MISSION
+  // ==========================================
 
   useEffect(() => {
     async function loadGenieMission() {
       try {
         setLoading(true);
-        setMessage("");
 
         const url =
           `${API_URL}/genie-mission` +
           `?campus_name=BMSCE` +
-          `&experience=${encodeURIComponent(experience)}` +
+          `&experience=${encodeURIComponent(
+            experience
+          )}` +
           `&wrong_attempts=${wrongAttempts}`;
 
-        console.log("Fetching Genie mission:", url);
+        console.log(
+          "Fetching Genie mission:",
+          url
+        );
 
-        const response = await fetch(url);
+        const response = await fetch(
+          url,
+          {
+            cache: "no-store",
+          }
+        );
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText =
+            await response.text();
 
           throw new Error(
             `Failed to fetch Genie mission: ${errorText}`
           );
         }
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
-        console.log("Genie response:", data);
+        console.log(
+          "Genie response:",
+          data
+        );
 
         if (!data.mission) {
           throw new Error(
@@ -107,8 +137,11 @@ function MissionContent() {
             "Databricks Genie selected this challenge based on your performance."
         );
 
+        // Reset mission UI
+
         setAnswer("");
         setHintLevel(0);
+        setMessage("");
 
       } catch (error) {
         console.error(
@@ -118,7 +151,9 @@ function MissionContent() {
 
         setMission(null);
 
-        setRecommendedDifficulty("Offline");
+        setRecommendedDifficulty(
+          "Offline"
+        );
 
         setReason(
           error instanceof Error
@@ -135,12 +170,20 @@ function MissionContent() {
 
   }, [
     experience,
-    wrongAttempts,
     missionRefresh,
   ]);
 
+
+  // ==========================================
+  // CHECK ANSWER
+  // ==========================================
+
   function checkAnswer() {
-    if (!mission || loading || !answer.trim()) {
+    if (
+      !mission ||
+      loading ||
+      !answer.trim()
+    ) {
       return;
     }
 
@@ -148,16 +191,21 @@ function MissionContent() {
       normalizeAnswer(answer);
 
     const correctAnswer =
-      normalizeAnswer(mission.correct_answer);
+      normalizeAnswer(
+        mission.correct_answer
+      );
 
     const locationName =
-      normalizeAnswer(mission.location_name);
+      normalizeAnswer(
+        mission.location_name
+      );
 
     const isCorrect =
       userAnswer === correctAnswer ||
       userAnswer === locationName;
 
     if (isCorrect) {
+
       setMessage("correct");
 
       if (
@@ -167,7 +215,8 @@ function MissionContent() {
       ) {
         setXp(
           (currentXp) =>
-            currentXp + mission.xp_reward
+            currentXp +
+            mission.xp_reward
         );
 
         setDiscoveredLocations(
@@ -181,50 +230,79 @@ function MissionContent() {
       return;
     }
 
+    // Show wrong answer instantly.
+    // Do NOT call Genie automatically.
+
     setMessage("wrong");
 
-    // Small delay so user can see
-    // the incorrect-answer feedback.
-    setTimeout(() => {
-      setWrongAttempts(
-        (attempts) => attempts + 1
-      );
-    }, 800);
+    setWrongAttempts(
+      (attempts) =>
+        attempts + 1
+    );
   }
+
+
+  // ==========================================
+  // HINT
+  // ==========================================
 
   function useHint() {
     if (hintLevel < 2) {
       setHintLevel(
-        (level) => level + 1
+        (level) =>
+          level + 1
       );
     }
   }
 
-  function newAdaptiveMission() {
+
+  // ==========================================
+  // LOAD NEXT ADAPTIVE MISSION
+  // ==========================================
+
+  function nextAdaptiveMission() {
     setAnswer("");
     setHintLevel(0);
     setMessage("");
+
+    setMissionRefresh(
+      (value) =>
+        value + 1
+    );
+  }
+
+
+  // ==========================================
+  // NEW MISSION AFTER SUCCESS
+  // ==========================================
+
+  function newMissionAfterSuccess() {
+    setAnswer("");
+    setHintLevel(0);
+    setMessage("");
+
+    // Successful answer resets
+    // the difficulty adaptation.
+
     setWrongAttempts(0);
 
     setMissionRefresh(
-      (value) => value + 1
+      (value) =>
+        value + 1
     );
   }
 
-  function skipMission() {
-    setAnswer("");
-    setHintLevel(0);
-    setMessage("");
 
-    setMissionRefresh(
-      (value) => value + 1
-    );
-  }
+  // ==========================================
+  // LOADING SCREEN
+  // ==========================================
 
   if (loading && !mission) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+
         <div className="text-center">
+
           <p className="text-xl font-bold">
             Loading AI mission...
           </p>
@@ -232,15 +310,24 @@ function MissionContent() {
           <p className="mt-2 text-sm text-slate-400">
             Databricks Genie is selecting your challenge
           </p>
+
         </div>
+
       </main>
     );
   }
 
+
+  // ==========================================
+  // ERROR SCREEN
+  // ==========================================
+
   if (!mission) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+
         <div className="max-w-md text-center">
+
           <p className="text-xl font-bold">
             No mission available.
           </p>
@@ -252,24 +339,34 @@ function MissionContent() {
           <button
             onClick={() =>
               setMissionRefresh(
-                (value) => value + 1
+                (value) =>
+                  value + 1
               )
             }
             className="mt-6 rounded-xl bg-blue-500 px-5 py-3 font-bold hover:bg-blue-400"
           >
             TRY AGAIN
           </button>
+
         </div>
+
       </main>
     );
   }
 
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-white md:px-12">
+
+
+      {/* ====================================== */}
+      {/* HEADER */}
+      {/* ====================================== */}
 
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4">
 
         <div>
+
           <p className="text-xs tracking-[0.3em] text-blue-400">
             CAMPUS CRYPTIC
           </p>
@@ -282,9 +379,12 @@ function MissionContent() {
             BMS College of Engineering •{" "}
             {experience.toUpperCase()}
           </p>
+
         </div>
 
+
         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2">
+
           <p className="text-xs text-slate-400">
             TOTAL XP
           </p>
@@ -292,19 +392,32 @@ function MissionContent() {
           <p className="text-xl font-bold text-yellow-400">
             {xp} XP
           </p>
+
         </div>
 
       </header>
 
+
+      {/* ====================================== */}
+      {/* MAIN CONTENT */}
+      {/* ====================================== */}
+
       <section className="mx-auto mt-12 grid max-w-6xl gap-8 lg:grid-cols-[2fr_1fr]">
 
+
+        {/* ==================================== */}
+        {/* MISSION CARD */}
+        {/* ==================================== */}
+
         <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-8 backdrop-blur">
+
 
           <div className="flex flex-wrap items-center justify-between gap-3">
 
             <span className="rounded-full bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-400">
               DATABRICKS GENIE MISSION
             </span>
+
 
             <span
               className={`rounded-full px-4 py-2 text-sm font-bold ${
@@ -320,6 +433,9 @@ function MissionContent() {
 
           </div>
 
+
+          {/* PUZZLE */}
+
           <div className="mt-10">
 
             <p className="text-sm uppercase tracking-widest text-purple-400">
@@ -332,11 +448,17 @@ function MissionContent() {
 
           </div>
 
+
+          {/* LOADING NEXT MISSION */}
+
           {loading && (
             <div className="mt-6 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm text-blue-300">
-              Genie is adapting your next challenge...
+              Databricks Genie is selecting your next challenge...
             </div>
           )}
+
+
+          {/* ANSWER SECTION */}
 
           <div className="mt-10">
 
@@ -344,33 +466,48 @@ function MissionContent() {
               ENTER YOUR ANSWER
             </label>
 
+
             <div className="mt-3 flex flex-col gap-3 sm:flex-row">
 
               <input
                 value={answer}
+
                 onChange={(event) =>
-                  setAnswer(event.target.value)
+                  setAnswer(
+                    event.target.value
+                  )
                 }
+
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
+                  if (
+                    event.key === "Enter"
+                  ) {
                     checkAnswer();
                   }
                 }}
-                placeholder="Type your answer..."
-                disabled={
-                  loading ||
-                  message === "correct"
-                }
-                className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 text-white outline-none transition focus:border-blue-400 disabled:opacity-50"
-              />
 
-              <button
-                onClick={checkAnswer}
+                placeholder="Type your answer..."
+
                 disabled={
                   loading ||
                   message === "correct" ||
+                  message === "wrong"
+                }
+
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 text-white outline-none transition focus:border-blue-400 disabled:opacity-50"
+              />
+
+
+              <button
+                onClick={checkAnswer}
+
+                disabled={
+                  loading ||
+                  message === "correct" ||
+                  message === "wrong" ||
                   !answer.trim()
                 }
+
                 className="rounded-xl bg-blue-500 px-6 py-4 font-bold transition hover:bg-blue-400 disabled:opacity-50"
               >
                 DECRYPT →
@@ -378,13 +515,42 @@ function MissionContent() {
 
             </div>
 
+
+            {/* ================================ */}
+            {/* WRONG ANSWER */}
+            {/* ================================ */}
+
             {message === "wrong" && (
-              <p className="mt-4 text-sm text-red-400">
-                Incorrect. Databricks Genie is adapting your next challenge...
-              </p>
+
+              <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
+
+                <p className="font-bold text-red-400">
+                  ❌ INCORRECT ANSWER
+                </p>
+
+                <p className="mt-2 text-sm text-slate-400">
+                  The AI Game Master has recorded your attempt.
+                  Your next mission will adapt to your performance.
+                </p>
+
+                <button
+                  onClick={nextAdaptiveMission}
+                  className="mt-5 rounded-xl bg-blue-500 px-5 py-3 text-sm font-bold hover:bg-blue-400"
+                >
+                  NEXT ADAPTIVE MISSION →
+                </button>
+
+              </div>
+
             )}
 
+
+            {/* ================================ */}
+            {/* CORRECT ANSWER */}
+            {/* ================================ */}
+
             {message === "correct" && (
+
               <div className="mt-6 rounded-2xl border border-green-500/30 bg-green-500/10 p-5">
 
                 <p className="font-bold text-green-400">
@@ -404,30 +570,48 @@ function MissionContent() {
                 </p>
 
                 <button
-                  onClick={newAdaptiveMission}
+                  onClick={
+                    newMissionAfterSuccess
+                  }
                   className="mt-5 rounded-xl bg-purple-600 px-5 py-3 text-sm font-bold hover:bg-purple-500"
                 >
                   NEW AI MISSION →
                 </button>
 
               </div>
+
             )}
 
+
+            {/* ================================ */}
+            {/* SKIP */}
+            {/* ================================ */}
+
             {!loading &&
-              message !== "correct" && (
+              message === "" && (
+
                 <button
-                  onClick={skipMission}
-                  className="mt-4 text-sm text-slate-500 hover:text-blue-400"
+                  onClick={nextAdaptiveMission}
+                  className="mt-4 text-sm text-slate-500 transition hover:text-blue-400"
                 >
                   Skip this mission →
                 </button>
+
               )}
 
           </div>
 
         </div>
 
+
+        {/* ==================================== */}
+        {/* SIDE PANEL */}
+        {/* ==================================== */}
+
         <aside className="space-y-6">
+
+
+          {/* PLAYER STATUS */}
 
           <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
 
@@ -438,17 +622,23 @@ function MissionContent() {
             <div className="mt-5">
 
               <div className="flex justify-between text-sm">
-                <span>Explorer</span>
+
+                <span>
+                  Explorer
+                </span>
 
                 <span className="text-blue-400">
                   {xp} / 500 XP
                 </span>
+
               </div>
+
 
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-800">
 
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
+
                   style={{
                     width: `${Math.min(
                       (xp / 500) * 100,
@@ -462,6 +652,9 @@ function MissionContent() {
             </div>
 
           </div>
+
+
+          {/* AI ENGINE */}
 
           <div className="rounded-3xl border border-purple-500/30 bg-purple-500/10 p-6">
 
@@ -481,6 +674,7 @@ function MissionContent() {
               {reason}
             </p>
 
+
             <div className="mt-4 border-t border-purple-500/20 pt-4">
 
               <p className="text-xs text-slate-500">
@@ -495,6 +689,9 @@ function MissionContent() {
 
           </div>
 
+
+          {/* HINTS */}
+
           <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
 
             <p className="text-xs tracking-widest text-slate-500">
@@ -505,30 +702,42 @@ function MissionContent() {
               Need a clue?
             </h3>
 
+
             {hintLevel === 0 && (
+
               <p className="mt-3 text-sm leading-6 text-slate-400">
                 The Databricks AI Game Master is ready to assist you.
               </p>
+
             )}
 
+
             {hintLevel >= 1 && (
+
               <div className="mt-4 rounded-xl bg-slate-950 p-4 text-sm text-blue-300">
                 💡 Hint 1: {mission.hint_1}
               </div>
+
             )}
 
+
             {hintLevel >= 2 && (
+
               <div className="mt-3 rounded-xl bg-slate-950 p-4 text-sm text-purple-300">
                 🔎 Hint 2: {mission.hint_2}
               </div>
+
             )}
+
 
             <button
               onClick={useHint}
+
               disabled={
                 hintLevel >= 2 ||
                 loading
               }
+
               className="mt-5 w-full rounded-xl border border-blue-500/40 px-4 py-3 text-sm font-semibold text-blue-400 transition hover:bg-blue-500/10 disabled:opacity-40"
             >
               {hintLevel >= 2
@@ -537,6 +746,9 @@ function MissionContent() {
             </button>
 
           </div>
+
+
+          {/* DISCOVERY */}
 
           <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
 
@@ -561,6 +773,7 @@ function MissionContent() {
     </main>
   );
 }
+
 
 export default function MissionPage() {
   return (
