@@ -90,7 +90,7 @@ export default function HomePage() {
             </p>
 
             <p className="font-semibold">
-              RV College of Engineering
+              BMS College of Engineering
             </p>
           </div>
 
