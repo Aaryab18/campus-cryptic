@@ -4,10 +4,8 @@ import requests
 
 from pathlib import Path
 from dotenv import load_dotenv
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
 from databricks import sql
 
 
@@ -26,10 +24,7 @@ load_dotenv(
 
 app = FastAPI(
     title="Campus Cryptic API",
-    description=(
-        "Adaptive campus exploration powered by "
-        "Databricks SQL and Databricks Genie"
-    ),
+    description="Adaptive campus exploration powered by Databricks SQL and Databricks Genie",
     version="5.0.0",
 )
 
@@ -90,10 +85,7 @@ def get_databricks_connection():
     ]):
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Databricks environment variables "
-                "are not configured"
-            ),
+            detail="Databricks environment variables are not configured",
         )
 
     return sql.connect(
@@ -138,31 +130,20 @@ def get_genie_headers():
 def calculate_difficulty(wrong_attempts: int):
 
     if wrong_attempts >= 3:
-
         return (
             "Easy",
-            (
-                "The player is struggling, so the AI "
-                "Game Master selected an easier challenge."
-            ),
+            "The player is struggling, so the AI Game Master selected an easier challenge."
         )
 
     elif wrong_attempts >= 1:
-
         return (
             "Medium",
-            (
-                "The player made incorrect attempts, so "
-                "the AI Game Master selected a moderate challenge."
-            ),
+            "The player made incorrect attempts, so the AI Game Master selected a moderate challenge."
         )
 
     return (
         "Hard",
-        (
-            "The player is performing well, so the AI "
-            "Game Master selected a harder challenge."
-        ),
+        "The player is performing well, so the AI Game Master selected a harder challenge."
     )
 
 
@@ -192,11 +173,6 @@ def debug_env():
         "host_configured": bool(DATABRICKS_HOST),
         "http_path_configured": bool(DATABRICKS_HTTP_PATH),
         "token_configured": bool(DATABRICKS_TOKEN),
-        "token_prefix": (
-            DATABRICKS_TOKEN[:8]
-            if DATABRICKS_TOKEN
-            else None
-        ),
     }
 
 
@@ -336,9 +312,7 @@ def get_mission(
             for column in cursor.description
         ]
 
-        mission = dict(
-            zip(columns, row)
-        )
+        mission = dict(zip(columns, row))
 
         cursor.close()
         connection.close()
@@ -359,7 +333,8 @@ def get_mission(
 
 
 # ===================================================
-# ADAPTIVE SQL MISSION
+# NORMAL ADAPTIVE MISSION
+# DATABRICKS SQL FALLBACK
 # ===================================================
 
 @app.get("/adaptive-mission")
@@ -406,10 +381,7 @@ def adaptive_mission(
 
             raise HTTPException(
                 status_code=404,
-                detail=(
-                    f"No {difficulty} mission found "
-                    f"for {campus_name}"
-                ),
+                detail=f"No {difficulty} mission found for {campus_name}",
             )
 
         columns = [
@@ -417,9 +389,7 @@ def adaptive_mission(
             for column in cursor.description
         ]
 
-        mission = dict(
-            zip(columns, row)
-        )
+        mission = dict(zip(columns, row))
 
         cursor.close()
         connection.close()
@@ -448,7 +418,7 @@ def adaptive_mission(
 # ===================================================
 
 def parse_genie_mission(
-    text: str,
+    genie_text: str,
     campus_name: str,
     experience: str,
     difficulty: str,
@@ -468,12 +438,18 @@ def parse_genie_mission(
         "xp_reward": 0,
     }
 
-    if not text:
+    if not genie_text:
         return mission
 
-    for line in text.strip().splitlines():
+    # Normalize text
+    lines = genie_text.strip().splitlines()
+
+    for line in lines:
 
         line = line.strip()
+
+        if not line:
+            continue
 
         if ":" not in line:
             continue
@@ -483,47 +459,48 @@ def parse_genie_mission(
         key = key.strip().lower()
         value = value.strip()
 
-        # Remove optional quotes or markdown
-        value = value.strip(
-            " \t\n\r\"'`*"
+        # Remove markdown formatting if Genie adds it
+        value = (
+            value
+            .replace("**", "")
+            .replace("*", "")
+            .strip()
         )
 
         if key == "location_name":
-
             mission["location_name"] = value
 
         elif key == "description":
-
             mission["description"] = value
 
         elif key == "puzzle":
-
             mission["puzzle"] = value
 
         elif key == "correct_answer":
-
             mission["correct_answer"] = value
 
         elif key == "difficulty":
 
-            mission["difficulty"] = value
+            normalized_difficulty = value.capitalize()
+
+            if normalized_difficulty in [
+                "Easy",
+                "Medium",
+                "Hard",
+            ]:
+                mission["difficulty"] = normalized_difficulty
 
         elif key == "hint_1":
-
             mission["hint_1"] = value
 
         elif key == "hint_2":
-
             mission["hint_2"] = value
 
         elif key == "xp_reward":
 
             try:
-
                 mission["xp_reward"] = int(value)
-
             except ValueError:
-
                 mission["xp_reward"] = 0
 
     return mission
@@ -550,6 +527,7 @@ def genie_mission(
         wrong_attempts
     )
 
+
     # -----------------------------------------------
     # GENIE PROMPT
     # -----------------------------------------------
@@ -557,33 +535,36 @@ def genie_mission(
     prompt = f"""
 You are the Campus Cryptic AI Game Master.
 
-Select exactly ONE mission from the campus_nodes data.
+Select exactly ONE mission from the campus_nodes data available to you.
 
-Campus name: {campus_name}
+Requirements:
+
+Campus: {campus_name}
 Experience: {experience}
 Difficulty: {difficulty}
 Wrong attempts: {wrong_attempts}
 
-Return ONLY these fields.
-Every field MUST be on exactly one line.
+Return EXACTLY these 8 lines.
 
 location_name: value
 description: value
 puzzle: value
 correct_answer: value
-difficulty: value
+difficulty: {difficulty}
 hint_1: value
 hint_2: value
 xp_reward: number
 
 Rules:
-- Do not use markdown.
 - Do not use JSON.
+- Do not use markdown.
+- Do not use bullet points.
 - Do not add explanations.
-- Do not add headings.
 - Do not add extra text.
-- Return all 8 fields.
+- Every field must contain a value.
+- Select only a real mission from campus_nodes data.
 """
+
 
     try:
 
@@ -604,11 +585,9 @@ Rules:
 
             raise HTTPException(
                 status_code=response.status_code,
-                detail=(
-                    "Genie start error: "
-                    f"{response.text}"
-                ),
+                detail=f"Genie start error: {response.text}",
             )
+
 
         start_data = response.json()
 
@@ -616,15 +595,17 @@ Rules:
             "conversation_id"
         )
 
+
         if not conversation_id:
 
             raise HTTPException(
                 status_code=500,
                 detail=(
-                    "No conversation ID returned "
-                    f"from Genie: {start_data}"
+                    "No conversation ID returned from Genie: "
+                    f"{start_data}"
                 ),
             )
+
 
         # -------------------------------------------
         # GENIE MESSAGE URL
@@ -635,8 +616,9 @@ Rules:
             f"/conversations/{conversation_id}/messages"
         )
 
+
         # -------------------------------------------
-        # POLL GENIE RESPONSE
+        # POLL GENIE
         # -------------------------------------------
 
         for _ in range(30):
@@ -649,6 +631,7 @@ Rules:
                 timeout=30,
             )
 
+
             if result_response.status_code >= 400:
 
                 raise HTTPException(
@@ -659,16 +642,20 @@ Rules:
                     ),
                 )
 
+
             result_data = result_response.json()
+
 
             messages = result_data.get(
                 "messages",
                 result_data
                 if isinstance(result_data, list)
-                else []
+                else [],
             )
 
+
             genie_answer = None
+
 
             # ---------------------------------------
             # FIND GENIE TEXT RESPONSE
@@ -678,14 +665,17 @@ Rules:
 
                 attachments = message.get(
                     "attachments",
-                    []
+                    [],
                 )
 
                 for attachment in attachments:
 
-                    text_data = attachment.get("text")
+                    if "text" in attachment:
 
-                    if text_data:
+                        text_data = attachment.get(
+                            "text",
+                            {},
+                        )
 
                         content = text_data.get(
                             "content"
@@ -699,8 +689,9 @@ Rules:
                 if genie_answer:
                     break
 
+
             # ---------------------------------------
-            # PARSE GENIE RESPONSE
+            # PARSE AND RETURN MISSION
             # ---------------------------------------
 
             if genie_answer:
@@ -712,10 +703,8 @@ Rules:
                     difficulty,
                 )
 
-                # -----------------------------------
-                # VALIDATE GENIE RESPONSE
-                # -----------------------------------
 
+                # Validate Genie result
                 required_fields = [
                     "location_name",
                     "description",
@@ -726,69 +715,23 @@ Rules:
                 ]
 
                 missing_fields = [
-
                     field
-
                     for field in required_fields
-
                     if not mission.get(field)
-
                 ]
 
-                if mission["xp_reward"] <= 0:
-
-                    missing_fields.append(
-                        "xp_reward"
-                    )
-
-                # -----------------------------------
-                # FALLBACK TO DATABRICKS SQL
-                # -----------------------------------
 
                 if missing_fields:
 
-                    connection = (
-                        get_databricks_connection()
+                    raise HTTPException(
+                        status_code=500,
+                        detail={
+                            "message": "Genie returned incomplete mission",
+                            "missing_fields": missing_fields,
+                            "raw_response": genie_answer,
+                        },
                     )
 
-                    cursor = connection.cursor()
-
-                    cursor.execute(
-                        """
-                        SELECT *
-                        FROM workspace.default.campus_nodes
-                        WHERE LOWER(campus_name) = LOWER(?)
-                          AND LOWER(experience) = LOWER(?)
-                          AND LOWER(difficulty) = LOWER(?)
-                        ORDER BY RAND()
-                        LIMIT 1
-                        """,
-                        (
-                            campus_name,
-                            experience,
-                            difficulty,
-                        ),
-                    )
-
-                    row = cursor.fetchone()
-
-                    if row:
-
-                        columns = [
-                            column[0]
-                            for column in cursor.description
-                        ]
-
-                        mission = dict(
-                            zip(columns, row)
-                        )
-
-                    cursor.close()
-                    connection.close()
-
-                # -----------------------------------
-                # RETURN FINAL RESPONSE
-                # -----------------------------------
 
                 return {
                     "source": "Databricks Genie",
@@ -800,6 +743,7 @@ Rules:
                     "genie_raw_response": genie_answer,
                 }
 
+
         # -------------------------------------------
         # TIMEOUT
         # -------------------------------------------
@@ -809,8 +753,10 @@ Rules:
             detail="Genie response timed out",
         )
 
+
     except HTTPException:
         raise
+
 
     except Exception as error:
 
