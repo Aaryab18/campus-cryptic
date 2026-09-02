@@ -10,7 +10,11 @@ app = FastAPI(
 # Allow the Next.js frontend to communicate with this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://campus-cryptic-ten.vercel.app",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
