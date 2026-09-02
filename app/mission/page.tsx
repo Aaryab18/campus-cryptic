@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { missions } from "@/lib/game/mockData";
 
 export default function MissionPage() {
@@ -19,11 +19,30 @@ export default function MissionPage() {
   const [hintLevel, setHintLevel] = useState(0);
   const [message, setMessage] = useState("");
   const [xp, setXp] = useState(0);
-  const [discoveredLocations, setDiscoveredLocations] = useState<string[]>([]);
-  const [wrongAttempts, setWrongAttempts] = useState(0);
+const [discoveredLocations, setDiscoveredLocations] = useState<string[]>([]);
+const [wrongAttempts, setWrongAttempts] = useState(0);
+const [recommendedDifficulty, setRecommendedDifficulty] =
+  useState("Calculating...");
 
   const mission = experienceMissions[missionIndex];
+  
+  useEffect(() => {
+  async function getAdaptiveDifficulty() {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/adaptive-difficulty?wrong_attempts=${wrongAttempts}`
+      );
 
+      const data = await response.json();
+
+      setRecommendedDifficulty(data.recommended_difficulty);
+    } catch {
+      setRecommendedDifficulty("Offline");
+    }
+  }
+
+  getAdaptiveDifficulty();
+}, [wrongAttempts]);
   function checkAnswer() {
     if (
       answer.trim().toLowerCase() ===
@@ -294,6 +313,16 @@ export default function MissionPage() {
             <h3 className="mt-3 text-xl font-bold">
               Need a clue?
             </h3>
+
+            <div className="mt-4 rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+  <p className="text-xs text-slate-500">
+    ADAPTIVE ENGINE
+  </p>
+
+  <p className="mt-1 font-bold text-purple-300">
+    Recommended Challenge: {recommendedDifficulty}
+  </p>
+</div>
 
             {hintLevel === 0 && (
               <p className="mt-3 text-sm leading-6 text-slate-400">
