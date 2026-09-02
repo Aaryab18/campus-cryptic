@@ -4,9 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type Mission = {
-  node_id: number;
-  campus_name: string;
-  experience: string;
+  node_id?: number;
+  campus_name?: string;
+  experience?: string;
   location_name: string;
   description: string;
   puzzle: string;
@@ -22,99 +22,186 @@ const API_URL = "https://campus-cryptic-api.onrender.com";
 function MissionContent() {
   const searchParams = useSearchParams();
 
-  const experience = searchParams.get("experience") || "freshman";
+  const experience =
+    searchParams.get("experience") || "freshman";
 
-  const [mission, setMission] = useState<Mission | null>(null);
-  const [answer, setAnswer] = useState("");
-  const [hintLevel, setHintLevel] = useState(0);
-  const [message, setMessage] = useState("");
-  const [xp, setXp] = useState(0);
-  const [discoveredLocations, setDiscoveredLocations] = useState<string[]>([]);
-  const [wrongAttempts, setWrongAttempts] = useState(0);
+  const [mission, setMission] =
+    useState<Mission | null>(null);
+
+  const [answer, setAnswer] =
+    useState("");
+
+  const [hintLevel, setHintLevel] =
+    useState(0);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [xp, setXp] =
+    useState(0);
+
+  const [discoveredLocations, setDiscoveredLocations] =
+    useState<string[]>([]);
+
+  const [wrongAttempts, setWrongAttempts] =
+    useState(0);
+
   const [recommendedDifficulty, setRecommendedDifficulty] =
     useState("Connecting...");
-  const [reason, setReason] = useState("");
-  const [loading, setLoading] = useState(true);
+
+  const [reason, setReason] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [missionRefresh, setMissionRefresh] =
+    useState(0);
 
   useEffect(() => {
     async function loadAdaptiveMission() {
       try {
         setLoading(true);
 
-        const response = await fetch(
-          `${API_URL}/adaptive-mission?campus_name=BMSCE&experience=${experience}&wrong_attempts=${wrongAttempts}`
+        const genieResponse = await fetch(
+          `${API_URL}/genie-mission?campus_name=BMSCE&experience=${encodeURIComponent(
+            experience
+          )}&wrong_attempts=${wrongAttempts}`
         );
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch mission");
+        if (!genieResponse.ok) {
+          const errorText =
+            await genieResponse.text();
+
+          throw new Error(
+            `Failed to fetch Genie mission: ${errorText}`
+          );
         }
 
-        const data = await response.json();
+        const genieData =
+          await genieResponse.json();
 
-        setMission(data.mission);
-        setRecommendedDifficulty(data.recommended_difficulty);
-        setReason(data.reason);
+        if (!genieData.mission) {
+          throw new Error(
+            "Genie did not return a mission"
+          );
+        }
 
-        // Reset the UI when a new adaptive mission is loaded
+        setMission(genieData.mission);
+
+        setRecommendedDifficulty(
+          genieData.recommended_difficulty ||
+            genieData.mission.difficulty ||
+            "Unknown"
+        );
+
+        setReason(
+          genieData.reason ||
+            "Databricks Genie selected this challenge based on your performance."
+        );
+
         setAnswer("");
         setHintLevel(0);
         setMessage("");
       } catch (error) {
-        console.error("Adaptive API error:", error);
+        console.error(
+          "Mission loading error:",
+          error
+        );
+
+        setMission(null);
+
         setRecommendedDifficulty("Offline");
-        setReason("Unable to connect to the adaptive engine.");
+
+        setReason(
+          error instanceof Error
+            ? error.message
+            : "Unable to connect to the Databricks AI Game Master."
+        );
       } finally {
         setLoading(false);
       }
     }
 
     loadAdaptiveMission();
-  }, [experience, wrongAttempts]);
+  }, [
+    experience,
+    wrongAttempts,
+    missionRefresh,
+  ]);
 
   function checkAnswer() {
-    if (!mission) return;
+    if (!mission || loading) return;
 
-    if (
-      answer.trim().toLowerCase() ===
-      mission.correct_answer.trim().toLowerCase()
-    ) {
+    const userAnswer =
+      answer.trim().toLowerCase();
+
+    const correctAnswer =
+      mission.correct_answer
+        .trim()
+        .toLowerCase();
+
+    if (userAnswer === correctAnswer) {
       setMessage("correct");
 
-      if (!discoveredLocations.includes(mission.location_name)) {
-        setXp((currentXp) => currentXp + mission.xp_reward);
+      if (
+        !discoveredLocations.includes(
+          mission.location_name
+        )
+      ) {
+        setXp(
+          (currentXp) =>
+            currentXp + mission.xp_reward
+        );
 
-        setDiscoveredLocations((locations) => [
-          ...locations,
-          mission.location_name,
-        ]);
+        setDiscoveredLocations(
+          (locations) => [
+            ...locations,
+            mission.location_name,
+          ]
+        );
       }
     } else {
       setMessage("wrong");
 
-      setWrongAttempts((attempts) => attempts + 1);
+      setWrongAttempts(
+        (attempts) => attempts + 1
+      );
     }
   }
 
   function useHint() {
     if (hintLevel < 2) {
-      setHintLevel((level) => level + 1);
+      setHintLevel(
+        (level) => level + 1
+      );
     }
   }
 
-  function restartAdaptiveMission() {
+  function newAdaptiveMission() {
     setAnswer("");
     setHintLevel(0);
     setMessage("");
+
+    // Start a fresh Hard challenge
     setWrongAttempts(0);
+
+    // Force reload even if attempts are already 0
+    setMissionRefresh(
+      (current) => current + 1
+    );
   }
 
   if (loading && !mission) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="text-center">
-          <p className="text-xl font-bold">Loading adaptive mission...</p>
+          <p className="text-xl font-bold">
+            Loading AI mission...
+          </p>
+
           <p className="mt-2 text-sm text-slate-400">
-            Connecting to Databricks
+            Databricks Genie is selecting your challenge
           </p>
         </div>
       </main>
@@ -125,10 +212,24 @@ function MissionContent() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="text-center">
-          <p className="text-xl font-bold">No mission available.</p>
-          <p className="mt-2 text-sm text-slate-400">
-            Please check the Databricks connection.
+          <p className="text-xl font-bold">
+            No mission available.
           </p>
+
+          <p className="mt-2 text-sm text-slate-400">
+            {reason}
+          </p>
+
+          <button
+            onClick={() =>
+              setMissionRefresh(
+                (current) => current + 1
+              )
+            }
+            className="mt-6 rounded-xl bg-blue-500 px-6 py-3 font-bold hover:bg-blue-400"
+          >
+            TRY AGAIN
+          </button>
         </div>
       </main>
     );
@@ -136,7 +237,8 @@ function MissionContent() {
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-white md:px-12">
-      {/* Header */}
+      {/* HEADER */}
+
       <header className="mx-auto flex max-w-6xl items-center justify-between">
         <div>
           <p className="text-xs tracking-[0.3em] text-blue-400">
@@ -148,12 +250,15 @@ function MissionContent() {
           </h1>
 
           <p className="mt-1 text-xs text-slate-500">
-            BMS College of Engineering • {experience.toUpperCase()}
+            BMS College of Engineering •{" "}
+            {experience.toUpperCase()}
           </p>
         </div>
 
         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2">
-          <p className="text-xs text-slate-400">TOTAL XP</p>
+          <p className="text-xs text-slate-400">
+            TOTAL XP
+          </p>
 
           <p className="text-xl font-bold text-yellow-400">
             {xp} XP
@@ -161,15 +266,15 @@ function MissionContent() {
         </div>
       </header>
 
-      {/* Main Game Area */}
+      {/* MAIN GAME */}
+
       <section className="mx-auto mt-12 grid max-w-6xl gap-8 lg:grid-cols-[2fr_1fr]">
+        {/* MISSION */}
 
-        {/* Mission */}
         <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-8 backdrop-blur">
-
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="rounded-full bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-400">
-              LIVE DATABRICKS MISSION
+              DATABRICKS GENIE MISSION
             </span>
 
             <span
@@ -187,7 +292,7 @@ function MissionContent() {
 
           <div className="mt-10">
             <p className="text-sm uppercase tracking-widest text-purple-400">
-              Adaptive Campus Challenge
+              AI Generated Campus Challenge
             </p>
 
             <h2 className="mt-4 whitespace-pre-line text-3xl font-black leading-tight md:text-5xl">
@@ -195,14 +300,14 @@ function MissionContent() {
             </h2>
           </div>
 
-          {/* Loading new adaptive mission */}
           {loading && (
             <div className="mt-6 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm text-blue-300">
-              Updating challenge based on your performance...
+              Genie is adapting your next challenge...
             </div>
           )}
 
-          {/* Answer */}
+          {/* ANSWER */}
+
           <div className="mt-10">
             <label className="text-sm text-slate-400">
               ENTER YOUR ANSWER
@@ -211,31 +316,41 @@ function MissionContent() {
             <div className="mt-3 flex flex-col gap-3 sm:flex-row">
               <input
                 value={answer}
-                onChange={(event) => setAnswer(event.target.value)}
+                onChange={(event) =>
+                  setAnswer(event.target.value)
+                }
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     checkAnswer();
                   }
                 }}
                 placeholder="Type your answer..."
-                disabled={loading || message === "correct"}
+                disabled={
+                  loading ||
+                  message === "correct"
+                }
                 className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-5 py-4 text-white outline-none transition focus:border-blue-400 disabled:opacity-50"
               />
 
               <button
                 onClick={checkAnswer}
-                disabled={loading || message === "correct"}
+                disabled={
+                  loading ||
+                  message === "correct"
+                }
                 className="rounded-xl bg-blue-500 px-6 py-4 font-bold transition hover:bg-blue-400 disabled:opacity-50"
               >
                 DECRYPT →
               </button>
             </div>
 
-            {message === "wrong" && !loading && (
-              <p className="mt-4 text-sm text-red-400">
-                Not quite. The Adaptive Engine is recalculating your next challenge...
-              </p>
-            )}
+            {message === "wrong" &&
+              !loading && (
+                <p className="mt-4 text-sm text-red-400">
+                  Incorrect. Databricks Genie is
+                  recalculating your next challenge...
+                </p>
+              )}
 
             {message === "correct" && (
               <div className="mt-6 rounded-2xl border border-green-500/30 bg-green-500/10 p-5">
@@ -256,20 +371,21 @@ function MissionContent() {
                 </p>
 
                 <button
-                  onClick={restartAdaptiveMission}
+                  onClick={newAdaptiveMission}
                   className="mt-5 rounded-xl bg-purple-600 px-5 py-3 text-sm font-bold hover:bg-purple-500"
                 >
-                  NEW ADAPTIVE MISSION →
+                  NEW AI MISSION →
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Side Panel */}
-        <aside className="space-y-6">
+        {/* SIDE PANEL */}
 
-          {/* Player Status */}
+        <aside className="space-y-6">
+          {/* PLAYER STATUS */}
+
           <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
             <p className="text-xs tracking-widest text-slate-500">
               PLAYER STATUS
@@ -288,17 +404,21 @@ function MissionContent() {
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
                   style={{
-                    width: `${Math.min((xp / 500) * 100, 100)}%`,
+                    width: `${Math.min(
+                      (xp / 500) * 100,
+                      100
+                    )}%`,
                   }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Adaptive Engine */}
+          {/* AI ENGINE */}
+
           <div className="rounded-3xl border border-purple-500/30 bg-purple-500/10 p-6">
             <p className="text-xs tracking-widest text-purple-300">
-              DATABRICKS ADAPTIVE ENGINE
+              DATABRICKS GENIE AI
             </p>
 
             <h3 className="mt-3 text-xl font-bold">
@@ -319,12 +439,13 @@ function MissionContent() {
               </p>
 
               <p className="mt-1 text-xs text-green-400">
-                ● Databricks Connected
+                ● Genie Connected
               </p>
             </div>
           </div>
 
-          {/* Hints */}
+          {/* HINTS */}
+
           <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
             <p className="text-xs tracking-widest text-slate-500">
               INTELLIGENCE ASSIST
@@ -336,7 +457,8 @@ function MissionContent() {
 
             {hintLevel === 0 && (
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                The AI Game Master is ready to assist you.
+                The Databricks AI Game Master is ready
+                to assist you.
               </p>
             )}
 
@@ -354,7 +476,10 @@ function MissionContent() {
 
             <button
               onClick={useHint}
-              disabled={hintLevel >= 2 || loading}
+              disabled={
+                hintLevel >= 2 ||
+                loading
+              }
               className="mt-5 w-full rounded-xl border border-blue-500/40 px-4 py-3 text-sm font-semibold text-blue-400 transition hover:bg-blue-500/10 disabled:opacity-40"
             >
               {hintLevel >= 2
@@ -363,7 +488,8 @@ function MissionContent() {
             </button>
           </div>
 
-          {/* Progress */}
+          {/* PROGRESS */}
+
           <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
             <p className="text-xs tracking-widest text-slate-500">
               DISCOVERY PROGRESS

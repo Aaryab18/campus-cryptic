@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 databricks-sql-connector
+requests
+python-dotenv
