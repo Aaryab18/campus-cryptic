@@ -1,32 +1,42 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 const experiences = [
   {
     id: "freshman",
     icon: "🧭",
     title: "Freshman Explorer",
-    description: "Discover your campus through simple clues and hidden stories.",
+    description:
+      "Discover your campus through simple clues and hidden stories.",
   },
   {
     id: "tech",
     icon: "⚡",
     title: "Tech Explorer",
-    description: "Solve logic, coding, and technical challenges.",
+    description:
+      "Solve logic, coding, and technical challenges.",
   },
   {
     id: "campus",
     icon: "🏛️",
     title: "Campus Explorer",
-    description: "Unlock campus trivia, landmarks, and secret locations.",
+    description:
+      "Unlock campus trivia, landmarks, and secret locations.",
   },
 ];
 
-export default function Home() {
+export default function HomePage() {
   const router = useRouter();
+
   const [selectedExperience, setSelectedExperience] = useState("");
+
+  function startAdventure() {
+    if (!selectedExperience) return;
+
+    router.push(`/mission?experience=${selectedExperience}`);
+  }
 
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-white">
@@ -39,7 +49,10 @@ export default function Home() {
           <h1 className="text-xl font-black tracking-wider">
             CAMPUS <span className="text-blue-400">CRYPTIC</span>
           </h1>
-          <p className="text-xs text-slate-500">EXPLORE • SOLVE • UNLOCK</p>
+
+          <p className="text-xs text-slate-500">
+            EXPLORE • SOLVE • UNLOCK
+          </p>
         </div>
 
         <div className="rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs text-blue-300">
@@ -56,6 +69,7 @@ export default function Home() {
         <h2 className="max-w-4xl text-5xl font-black leading-tight md:text-7xl">
           Your campus is not a map.
           <br />
+
           <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-purple-400 bg-clip-text text-transparent">
             It&apos;s a world waiting to be unlocked.
           </span>
@@ -74,7 +88,10 @@ export default function Home() {
             <p className="text-xs uppercase tracking-widest text-slate-500">
               Demo Campus
             </p>
-            <p className="font-semibold">RV College of Engineering</p>
+
+            <p className="font-semibold">
+              RV College of Engineering
+            </p>
           </div>
 
           <span className="ml-4 rounded-lg bg-green-500/10 px-3 py-1 text-xs text-green-400">
@@ -94,9 +111,13 @@ export default function Home() {
                   : "border-slate-800 bg-slate-900/60 hover:-translate-y-1 hover:border-slate-600"
               }`}
             >
-              <div className="mb-4 text-3xl">{experience.icon}</div>
+              <div className="mb-4 text-3xl">
+                {experience.icon}
+              </div>
 
-              <h3 className="text-lg font-bold">{experience.title}</h3>
+              <h3 className="text-lg font-bold">
+                {experience.title}
+              </h3>
 
               <p className="mt-2 text-sm leading-6 text-slate-400">
                 {experience.description}
@@ -113,8 +134,8 @@ export default function Home() {
 
         {/* Start Button */}
         <button
-  onClick={() => router.push(`/mission?experience=${selectedExperience}`)}
-  disabled={!selectedExperience}
+          onClick={startAdventure}
+          disabled={!selectedExperience}
           className="mt-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 font-bold transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {selectedExperience
