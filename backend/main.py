@@ -1,76 +1,60 @@
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from databricks import sql
+
 
 app = FastAPI(
     title="Campus Cryptic API",
-    description="Backend API for the Campus Cryptic adaptive campus exploration game",
-    version="1.0.0",
+    description="Adaptive campus exploration powered by Databricks",
+    version="2.0.0",
 )
 
+
+# Allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
         "https://campus-cryptic-ten.vercel.app",
+        "http://localhost:3000",
     ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Temporary in-memory mission data
-# Later this can be replaced by Databricks Delta Tables.
-missions = [
-    {
-        "id": 1,
-        "experience": "freshman",
-        "title": "The House of Knowledge",
-        "location": "RVCE Central Library",
-        "difficulty": "Easy",
-        "xp": 50,
-    },
-    {
-        "id": 2,
-        "experience": "freshman",
-        "title": "The Gathering Place",
-        "location": "RVCE Auditorium",
-        "difficulty": "Easy",
-        "xp": 60,
-    },
-    {
-        "id": 3,
-        "experience": "tech",
-        "title": "The Debug Zone",
-        "location": "Innovation & Computer Labs",
-        "difficulty": "Medium",
-        "xp": 75,
-    },
-    {
-        "id": 4,
-        "experience": "tech",
-        "title": "The Logic Gate",
-        "location": "Engineering Block",
-        "difficulty": "Medium",
-        "xp": 80,
-    },
-    {
-        "id": 5,
-        "experience": "campus",
-        "title": "The Energy Hub",
-        "location": "Sports Ground",
-        "difficulty": "Easy",
-        "xp": 65,
-    },
-    {
-        "id": 6,
-        "experience": "campus",
-        "title": "The Student Hub",
-        "location": "Food Court",
-        "difficulty": "Easy",
-        "xp": 60,
-    },
-]
+
+# Databricks configuration from Render environment variables
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
+DATABRICKS_HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH")
+DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
+
+
+def get_databricks_connection():
+    if not all(
+        [
+            DATABRICKS_HOST,
+            DATABRICKS_HTTP_PATH,
+            DATABRICKS_TOKEN,
+        ]
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail="Databricks environment variables are not configured",
+        )
+
+    # Remove https:// because the connector expects only the hostname
+    server_hostname = DATABRICKS_HOST.replace(
+        "https://", ""
+    ).replace(
+        "http://", ""
+    ).rstrip("/")
+
+    return sql.connect(
+        server_hostname=server_hostname,
+        http_path=DATABRICKS_HTTP_PATH,
+        access_token=DATABRICKS_TOKEN,
+    )
 
 
 @app.get("/")
@@ -78,115 +62,220 @@ def root():
     return {
         "message": "Campus Cryptic API is running",
         "status": "online",
+        "databricks": "connected",
     }
+
+
+@app.get("/health")
+def health():
+    try:
+        connection = get_databricks_connection()
+        cursor = connection.cursor()
+
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "status": "online",
+            "databricks": "connected",
+            "test": result[0],
+        }
+
+    except Exception as error:
+        return {
+            "status": "online",
+            "databricks": "error",
+            "message": str(error),
+        }
 
 
 @app.get("/missions")
 def get_missions():
-    return {
-        "count": len(missions),
-        "missions": missions,
-    }
+    try:
+        connection = get_databricks_connection()
+        cursor = connection.cursor()
 
+        cursor.execute("""
+            SELECT *
+            FROM workspace.default.campus_nodes
+            ORDER BY node_id
+        """)
 
-@app.get("/missions/{experience}")
-def get_missions_by_experience(experience: str):
-    filtered_missions = [
-        mission
-        for mission in missions
-        if mission["experience"] == experience.lower()
-    ]
+        columns = [column[0] for column in cursor.description]
 
-    return {
-        "experience": experience,
-        "count": len(filtered_missions),
-        "missions": filtered_missions,
-    }
+        missions = [
+            dict(zip(columns, row))
+            for row in cursor.fetchall()
+        ]
 
+        cursor.close()
+        connection.close()
 
-@app.get("/leaderboard")
-def get_leaderboard():
-    leaderboard = [
-        {
-            "rank": 1,
-            "name": "CodeBreaker",
-            "xp": 320,
-            "locations_discovered": 6,
-        },
-        {
-            "rank": 2,
-            "name": "CampusExplorer",
-            "xp": 275,
-            "locations_discovered": 5,
-        },
-        {
-            "rank": 3,
-            "name": "PuzzleMaster",
-            "xp": 210,
-            "locations_discovered": 4,
-        },
-    ]
-
-    return {
-        "leaderboard": leaderboard,
-    }
-
-
-@app.get("/analytics")
-def get_analytics():
-    return {
-        "total_missions": len(missions),
-        "total_players": 42,
-        "average_xp": 145,
-        "most_discovered_location": "RVCE Central Library",
-        "completion_rate": "68%",
-    }
-
-
-@app.get("/ai-hint/{mission_id}")
-def get_ai_hint(mission_id: int):
-    mission = next(
-        (item for item in missions if item["id"] == mission_id),
-        None,
-    )
-
-    if not mission:
         return {
-            "error": "Mission not found"
+            "count": len(missions),
+            "missions": missions,
         }
 
-    hints = {
-        1: "Think about a place where knowledge is stored.",
-        2: "Think about a place where large events take place.",
-        3: "Think about where programmers build and debug.",
-        4: "Think about where engineering students attend classes.",
-        5: "Think about where students play and compete.",
-        6: "Think about where students eat and socialize.",
-    }
-
-    return {
-        "mission_id": mission_id,
-        "location": mission["location"],
-        "ai_hint": hints.get(
-            mission_id,
-            "Explore the clues carefully and think about the campus."
-        ),
-    }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        )
 
 
-@app.get("/adaptive-difficulty")
-def adaptive_difficulty(wrong_attempts: int = 0):
+@app.get("/mission")
+def get_adaptive_mission(
+    campus_name: str = "BMSCE",
+    experience: str = "freshman",
+    difficulty: str = "Hard",
+):
+    try:
+        connection = get_databricks_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM workspace.default.campus_nodes
+            WHERE LOWER(campus_name) = LOWER(?)
+              AND LOWER(experience) = LOWER(?)
+              AND LOWER(difficulty) = LOWER(?)
+            ORDER BY node_id
+            LIMIT 1
+            """,
+            (
+                campus_name,
+                experience,
+                difficulty,
+            ),
+        )
+
+        row = cursor.fetchone()
+
+        if not row:
+            cursor.close()
+            connection.close()
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No mission found for "
+                    f"{campus_name}, "
+                    f"{experience}, "
+                    f"{difficulty}"
+                ),
+            )
+
+        columns = [
+            column[0]
+            for column in cursor.description
+        ]
+
+        mission = dict(zip(columns, row))
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "mission": mission,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        )
+
+
+@app.get("/adaptive-mission")
+def get_adaptive_mission_by_attempts(
+    campus_name: str = "BMSCE",
+    experience: str = "freshman",
+    wrong_attempts: int = 0,
+):
+    # Adaptive difficulty logic
     if wrong_attempts >= 3:
         difficulty = "Easy"
-        message = "Player is struggling. Recommend an easier mission."
+        reason = (
+            "Player is struggling. "
+            "Switching to an easier mission."
+        )
+
     elif wrong_attempts >= 1:
         difficulty = "Medium"
-        message = "Player needs moderate challenge and additional hints."
+        reason = (
+            "Player needs a moderate challenge."
+        )
+
     else:
         difficulty = "Hard"
-        message = "Player is performing well. Increase challenge."
+        reason = (
+            "Player is performing well. "
+            "Increasing challenge."
+        )
 
-    return {
-        "recommended_difficulty": difficulty,
-        "reason": message,
-    }
+    try:
+        connection = get_databricks_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT *
+            FROM workspace.default.campus_nodes
+            WHERE LOWER(campus_name) = LOWER(?)
+              AND LOWER(experience) = LOWER(?)
+              AND LOWER(difficulty) = LOWER(?)
+            ORDER BY node_id
+            LIMIT 1
+            """,
+            (
+                campus_name,
+                experience,
+                difficulty,
+            ),
+        )
+
+        row = cursor.fetchone()
+
+        if not row:
+            cursor.close()
+            connection.close()
+
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"No {difficulty} mission found "
+                    f"for {campus_name}"
+                ),
+            )
+
+        columns = [
+            column[0]
+            for column in cursor.description
+        ]
+
+        mission = dict(zip(columns, row))
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "recommended_difficulty": difficulty,
+            "reason": reason,
+            "mission": mission,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        )
