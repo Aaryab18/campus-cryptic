@@ -28,9 +28,9 @@ export default function DashboardPage() {
       try {
         const [leaderboardResponse, analyticsResponse, statusResponse] =
           await Promise.all([
-            fetch("http://127.0.0.1:8000/leaderboard"),
-            fetch("http://127.0.0.1:8000/analytics"),
-            fetch("http://127.0.0.1:8000/"),
+            fetch("https://campus-cryptic-api.onrender.com/leaderboard"),
+            fetch("https://campus-cryptic-api.onrender.com/analytics"),
+            fetch("https://campus-cryptic-api.onrender.com/"),
           ]);
 
         const leaderboardData = await leaderboardResponse.json();

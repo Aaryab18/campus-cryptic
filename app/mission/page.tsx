@@ -30,7 +30,7 @@ const [recommendedDifficulty, setRecommendedDifficulty] =
   async function getAdaptiveDifficulty() {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/adaptive-difficulty?wrong_attempts=${wrongAttempts}`
+        `https://campus-cryptic-api.onrender.com/adaptive-difficulty?wrong_attempts=${wrongAttempts}`
       );
 
       const data = await response.json();
