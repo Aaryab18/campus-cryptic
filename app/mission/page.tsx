@@ -26,34 +26,49 @@ function MissionContent() {
   const mission =
     experienceMissions[missionIndex] || experienceMissions[0];
 
-    useEffect(() => {
-    async function loadDifficulty() {
-      setRecommendedDifficulty("Connecting...");
+      useEffect(() => {
+    let cancelled = false;
 
+    async function loadDifficulty(retry = 0) {
       try {
+        setRecommendedDifficulty("Connecting...");
+
         const response = await fetch(
-          `https://campus-cryptic-api.onrender.com/adaptive-difficulty?wrong_attempts=${wrongAttempts}`,
-          {
-            method: "GET",
-          }
-        );
+  `https://campus-cryptic-api.onrender.com/adaptive-difficulty?wrong_attempts=${wrongAttempts}`,
+  {
+    method: "GET",
+    cache: "no-store",
+  }
+);
 
         if (!response.ok) {
-          throw new Error("Backend request failed");
+          throw new Error(`API error: ${response.status}`);
         }
 
         const data = await response.json();
 
-        setRecommendedDifficulty(
-          data.recommended_difficulty || "Unavailable"
-        );
+        if (!cancelled) {
+          setRecommendedDifficulty(
+            data.recommended_difficulty ?? "Unavailable"
+          );
+        }
       } catch (error) {
         console.error("Adaptive API error:", error);
-        setRecommendedDifficulty("Offline");
+
+        // Render may be waking up — retry up to 3 times
+        if (retry < 3 && !cancelled) {
+          setTimeout(() => loadDifficulty(retry + 1), 3000);
+        } else if (!cancelled) {
+          setRecommendedDifficulty("Offline");
+        }
       }
     }
 
     loadDifficulty();
+
+    return () => {
+      cancelled = true;
+    };
   }, [wrongAttempts]);
 
   function checkAnswer() {
